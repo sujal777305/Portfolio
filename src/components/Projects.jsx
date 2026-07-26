@@ -1,50 +1,65 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import Spinner from './Spinner.jsx';
+import ErrorMessage from './ErrorMessage.jsx';
+
+/** GitHub username used for the public REST API (change if needed). */
+const GITHUB_USERNAME = 'sujal777305';
 
 /**
  * Projects Component
- * Renders the portfolio projects section displaying project cards.
+ * Fetches public repositories from the GitHub REST API and renders them
+ * with loading, error, and success UI states (Practical 3).
  */
 function Projects() {
-  // Array of project details to keep the code DRY and structured
-  const projectsList = [
-    {
-      title: 'SmartID Attendance System',
-      category: 'AI & Web Application',
-      description: 'An automated, high-security student attendance system utilizing face recognition and instant QR verification codes to replace manual registers.',
-      features: [
-        'Real-time automated face verification',
-        'Dynamic secure QR codes for check-ins',
-        'Comprehensive admin panel with analytics',
-        'REST APIs for campus database sync'
-      ],
-      techStack: ['React', 'Node.js', 'Express.js', 'MongoDB', 'REST APIs', 'ML Basics'],
-      githubLink: 'https://github.com/sujalpatel/smartid-attendance'
-    },
-    {
-      title: 'AI Resume Analyzer',
-      category: 'Data Science & NLP',
-      description: 'A smart tool that parses resumes in PDF format, evaluates technical skills, and matches them with active job description requirements using basic ML NLP keyword tags.',
-      features: [
-        'PDF parser extracting structured text',
-        'Skills gap visualization charts',
-        'Automated profile matching score'
-      ],
-      techStack: ['Python', 'Machine Learning Basics', 'REST APIs', 'VS Code'],
-      githubLink: 'https://github.com/sujalpatel/ai-resume-analyzer'
-    },
-    {
-      title: 'Personal Portfolio Website',
-      category: 'Frontend Design',
-      description: 'A fully responsive, sleek, and innovative developer portfolio showcasing technical expertise, educational path, and academic practical assignments.',
-      features: [
-        'Premium glassmorphic UI design',
-        'Custom clean CSS grids and animations',
-        'Responsive mobile hamburger drawer'
-      ],
-      techStack: ['React', 'Vite', 'CSS3', 'HTML5', 'Git'],
-      githubLink: 'https://github.com/sujalpatel/student-portfolio'
-    }
-  ];
+  const [repos, setRepos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // Supplementary: search/filter by repository name
+  const [searchTerm, setSearchTerm] = useState('');
+  // Bump this to re-run the effect (retry button)
+  const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setLoading(true);
+    setError(null);
+
+    fetch(`https://api.github.com/users/${GITHUB_USERNAME}/repos`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setRepos(Array.isArray(data) ? data : []);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message || 'Failed to fetch repositories');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [retryCount]);
+
+  const handleRetry = () => {
+    setRetryCount((count) => count + 1);
+  };
+
+  const filteredRepos = repos.filter((repo) =>
+    repo.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <section id="projects" className="section">
@@ -52,64 +67,119 @@ function Projects() {
 
       <span className="section-subtitle">My Creative Works</span>
       <h2 className="section-title">Projects</h2>
+      <p className="projects-api-note">
+        Live data from the GitHub API for{' '}
+        <a
+          href={`https://github.com/${GITHUB_USERNAME}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          @{GITHUB_USERNAME}
+        </a>
+      </p>
 
-      <div className="projects-grid">
-        {projectsList.map((project, index) => (
-          <div key={index} className="project-card glass-card">
-            {/* Card header with category and title */}
-            <div className="project-header">
-              <span className="project-category">{project.category}</span>
-              <h3>{project.title}</h3>
-            </div>
+      {loading && <Spinner />}
 
-            {/* Description */}
-            <p className="project-desc">{project.description}</p>
+      {!loading && error && (
+        <ErrorMessage message={error} onRetry={handleRetry} />
+      )}
 
-            {/* Features lists */}
-            <div className="project-features">
-              <h4>Key Features:</h4>
-              <ul>
-                {project.features.map((feature, fIdx) => (
-                  <li key={fIdx}>
-                    <span className="feature-icon">✓</span> {feature}
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {!loading && !error && (
+        <>
+          {/* Supplementary: filter repositories by name */}
+          <div className="repo-search-bar">
+            <label htmlFor="repo-search" className="visually-hidden">
+              Search repositories
+            </label>
+            <input
+              id="repo-search"
+              type="search"
+              className="repo-search-input"
+              placeholder="Search repositories by name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <span className="repo-count">
+              {filteredRepos.length} of {repos.length} repos
+            </span>
+          </div>
 
-            {/* Tech badges */}
-            <div className="project-tech">
-              {project.techStack.map((tech, tIdx) => (
-                <span key={tIdx} className="tech-badge">
-                  {tech}
-                </span>
+          {filteredRepos.length === 0 ? (
+            <p className="repo-empty">
+              {repos.length === 0
+                ? 'No public repositories found for this user.'
+                : 'No repositories match your search.'}
+            </p>
+          ) : (
+            <div className="projects-grid">
+              {filteredRepos.map((repo) => (
+                <article key={repo.id} className="project-card glass-card repo-card">
+                  <div className="project-header">
+                    <span className="project-category">
+                      {repo.language || 'Repository'}
+                    </span>
+                    <h3>{repo.name}</h3>
+                  </div>
+
+                  {repo.description && (
+                    <p className="project-desc">{repo.description}</p>
+                  )}
+
+                  {/* Supplementary: display star count */}
+                  <div className="repo-meta">
+                    <span className="repo-stars" title="Stars">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="star-icon"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                      {repo.stargazers_count}
+                    </span>
+                    {repo.forks_count > 0 && (
+                      <span className="repo-forks">{repo.forks_count} forks</span>
+                    )}
+                    {repo.updated_at && (
+                      <span className="repo-updated">
+                        Updated{' '}
+                        {new Date(repo.updated_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="project-footer">
+                    <a
+                      href={repo.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="project-link"
+                    >
+                      <span>View on GitHub</span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="link-arrow"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                        />
+                      </svg>
+                    </a>
+                  </div>
+                </article>
               ))}
             </div>
-
-            {/* Action link */}
-            <div className="project-footer">
-              <a 
-                href={project.githubLink} 
-                target="_blank" 
-                rel="noreferrer" 
-                className="project-link"
-              >
-                <span>View on GitHub</span>
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  strokeWidth={2} 
-                  stroke="currentColor" 
-                  className="link-arrow"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-              </a>
-            </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </>
+      )}
     </section>
   );
 }

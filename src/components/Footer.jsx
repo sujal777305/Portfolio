@@ -21,7 +21,7 @@ function Footer() {
         <div className="footer-socials">
           {/* GitHub Link */}
           <a 
-            href="https://github.com" 
+            href="https://github.com/sujal777305" 
             target="_blank" 
             rel="noreferrer" 
             className="social-icon-link" 
@@ -77,7 +77,7 @@ function Footer() {
         {/* Copyright section */}
         <div className="footer-copyright">
           <p>&copy; {currentYear} Sujal Patel. All rights reserved.</p>
-          <p className="practical-tag">College Practical 1 - Web Development</p>
+          <p className="practical-tag">College Practical 3 — API Integration (GitHub)</p>
         </div>
 
       </div>

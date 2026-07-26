@@ -1150,3 +1150,187 @@
   color: var(--text-secondary);
   margin: 16px 0 28px;
 }
+
+/* ================================
+   Practical 3 – API Integration
+   ================================ */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.projects-api-note {
+  text-align: center;
+  color: var(--text-secondary);
+  margin: -24px auto 28px;
+  max-width: 640px;
+  font-size: 0.95rem;
+}
+
+.projects-api-note a {
+  color: var(--accent-teal);
+  font-weight: 600;
+}
+
+.projects-api-note a:hover {
+  color: var(--accent-indigo);
+}
+
+/* Loading spinner */
+.spinner-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 64px 24px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-indigo);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner-text {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* Error message card */
+.error-message-card {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 40px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  margin-bottom: 4px;
+}
+
+.error-message-card h3 {
+  font-size: 1.25rem;
+}
+
+.error-detail {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+
+.retry-btn {
+  margin-top: 8px;
+}
+
+/* Search / filter bar */
+.repo-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.repo-search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  transition: var(--transition-smooth);
+}
+
+.repo-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.repo-search-input:focus {
+  outline: none;
+  border-color: var(--accent-indigo);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.repo-count {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.repo-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 40px 16px;
+}
+
+/* Repo card meta (stars, forks, updated) */
+.repo-card .project-desc {
+  flex-grow: 1;
+}
+
+.repo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.repo-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-teal);
+  font-weight: 600;
+}
+
+.star-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.repo-forks,
+.repo-updated {
+  color: var(--text-muted);
+}

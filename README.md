@@ -1,16 +1,67 @@
-# React + Vite
+# Student Portfolio — Advanced Web Development Frameworks (ITUE301)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite multi-page student portfolio for CHARUSAT practicals.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Practical 1:** Multi-section portfolio (Home, About, Skills, Education, Projects, Contact)
+- **Practical 2:** React Router routes, theme toggle, contact form state
+- **Practical 3:** GitHub REST API integration on the Projects page with loading & error states
 
-## React Compiler
+## Practical 3 — API Integration
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The `/projects` page fetches public repositories from the [GitHub REST API](https://docs.github.com/en/rest):
 
-## Expanding the Oxlint configuration
+```
+GET https://api.github.com/users/<username>/repos
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+### What it implements
+
+| Requirement | Implementation |
+|---|---|
+| Fetch on mount | `useEffect` with dependency array `[]` (plus retry counter) |
+| Async states | `repos`, `loading`, `error` via `useState` |
+| Loading UI | `<Spinner />` while the request is in progress |
+| Error UI | `<ErrorMessage />` if the request fails |
+| Success UI | Repository **name** and **html_url** for each item |
+| Retry button | Re-triggers the fetch on error (supplementary) |
+| Search filter | Filters the list by repository name (supplementary) |
+| Star count | Shows `stargazers_count` beside each repo (supplementary) |
+
+### Setup
+
+1. Open `src/components/Projects.jsx` and set your GitHub username:
+
+```js
+const GITHUB_USERNAME = 'sujal777305'; // ← change to your username
+```
+
+2. No API key is required — the public GitHub API is used (rate-limited when unauthenticated).
+
+3. Install and run:
+
+```bash
+npm install
+npm run dev
+```
+
+4. Open the Projects page in the browser and confirm repositories load after the spinner.
+
+5. To test the error path, temporarily change the API URL (e.g. break the username) and confirm the error message + retry button appear.
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start Vite development server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |
+
+## Tech Stack
+
+- React 18+
+- Vite
+- React Router
+- Fetch API (GitHub REST)
+- CSS (custom design tokens, dark/light theme)
