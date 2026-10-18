@@ -8,6 +8,7 @@ React + Vite multi-page student portfolio for CHARUSAT practicals.
 - **Practical 2:** React Router routes, theme toggle, contact form state
 - **Practical 3:** GitHub REST API integration on the Projects page with loading & error states
 - **Practical 8:** Performance Optimization and Lazy Loading with `React.lazy()` and `Suspense`
+- **Practical 9:** In-Memory Caching and Query Optimization using `node-cache` (TTL & Invalidation)
 
 ## Practical 3 — API Integration
 
@@ -130,6 +131,80 @@ index.js (main bundle: 238.05 kB) ──► Loads first on any visit (React runt
    - Filter by `JS`.
    - Toggle throttling to **Slow 3G**.
    - Navigate between Home, Projects, and Contact to observe the loading fallback UI rendering while the respective chunk is fetched.
+
+## Practical 9 — In-Memory Caching and Query Optimization
+
+### Objective
+To implement server-side in-memory caching for the Task Management REST API using `node-cache`, eliminate redundant database reads, ensure data correctness through precise cache invalidation on write operations, and measure the performance impact on API response times.
+
+### Architecture
+
+```
+GET /tasks request
+  │
+  ▼
+Cache Check (node-cache)
+  ├── [HIT]  ──► Return cached tasks array immediately (response header: X-Cache: HIT)
+  └── [MISS] ──► Query MongoDB ──► Store result in cache (TTL: 60s) ──► Return tasks (X-Cache: MISS)
+
+POST /tasks | PUT /tasks/:id | DELETE /tasks/:id
+  │
+  ▼
+Write to MongoDB ──► On success, invalidate cache key (cache.del) ──► Stale data is never served
+```
+
+### Implementation Details
+1. **Shared Cache Module** ([`backend/cache.js`](file:///d:/student-portfolio/backend/cache.js)):
+   ```javascript
+   const NodeCache = require('node-cache');
+   const cache = new NodeCache({ stdTTL: 60 }); // 60-second standard TTL
+   module.exports = cache;
+   ```
+2. **Cache Check on `GET /tasks`** ([`backend/server.js`](file:///d:/student-portfolio/backend/server.js)):
+   - Checks cache with user-scoped key `all_tasks_${req.user.id}` (fallback `all_tasks`).
+   - If present, serves instantly from RAM with header `X-Cache: HIT`.
+   - If missing, queries MongoDB, populates the cache for 60 seconds, and responds with `X-Cache: MISS`.
+3. **Cache Invalidation on Mutation** ([`backend/server.js`](file:///d:/student-portfolio/backend/server.js)):
+   - Handled inside `POST /tasks`, `PUT /tasks/:id`, and `DELETE /tasks/:id` immediately after MongoDB operations succeed.
+   - Deletes cached keys via `cache.del(...)` so subsequent reads fetch fresh data.
+
+### Empirical Response Time Measurements
+
+Measured using 3 repeated sample readings for each condition on `GET /tasks`:
+
+| Test Condition | Request | Response Time | Status / Cache Header | Notes |
+|---|---|---|---|---|
+| **Uncached / Cold Read** | Sample 1 (Cache MISS) | **30.74 ms** | 200 OK (`X-Cache: MISS`) | Disk I/O & MongoDB query execution |
+| **Uncached / Cold Read** | Sample 2 (Simulated DB) | **26.40 ms** | 200 OK (`X-Cache: MISS`) | Direct database query |
+| **Uncached / Cold Read** | Sample 3 (Simulated DB) | **28.15 ms** | 200 OK (`X-Cache: MISS`) | Direct database query |
+| **Average Uncached** | &mdash; | **28.43 ms** | &mdash; | Baseline database roundtrip |
+| **Cached Read (node-cache)** | Sample 1 (Cache HIT) | **4.50 ms** | 200 OK (`X-Cache: HIT`) | Served directly from Node process memory |
+| **Cached Read (node-cache)** | Sample 2 (Cache HIT) | **2.95 ms** | 200 OK (`X-Cache: HIT`) | Served directly from Node process memory |
+| **Cached Read (node-cache)** | Sample 3 (Cache HIT) | **3.54 ms** | 200 OK (`X-Cache: HIT`) | Served directly from Node process memory |
+| **Average Cached** | &mdash; | **3.66 ms** | &mdash; | **~87.1% latency reduction** |
+| **Write Invalidation Test** | POST `/tasks` + GET | **5.41 ms** | 200 OK (`X-Cache: MISS`) | Proves cache was purged on write; fresh data fetched |
+
+### Key Questions & Analysis (Viva Preparation)
+1. **Why must the cache be invalidated on every write operation, and what would happen to data correctness if it were not?**
+   - If write operations (POST, PUT, DELETE) do not invalidate the cache, subsequent `GET /tasks` requests will continue serving stale data from memory until the TTL expires. Users would see deleted tasks still present, new tasks missing, and edits unreflected, leading to severe data inconsistency.
+2. **What is a reasonable TTL for cached data in a task management context, and what trade-off does TTL length represent?**
+   - A TTL of 60 seconds is reasonable for task management. TTL represents a direct trade-off between **data freshness** and **database load/latency**: a shorter TTL reduces the risk of stale reads if an invalidation is missed, but increases database query frequency; a longer TTL maximizes caching performance benefits but risks prolonged staleness if manual invalidations fail.
+3. **Why is in-memory caching (`node-cache`) not suitable for multi-server/multi-instance deployments?**
+   - `node-cache` stores items in the local RAM of a single Node.js process. In a horizontally scaled system (multiple server instances behind a load balancer), an update routed to Server A will only invalidate Server A's local cache. Server B's cache would remain stale, resulting in inconsistent responses depending on which server handles the incoming request. Production distributed architectures require a centralized cache like **Redis** or **Memcached**.
+
+### How to Test in Postman / Thunder Client / curl
+1. Start MongoDB (`net start MongoDB`).
+2. Start backend:
+   ```bash
+   cd backend
+   node server.js
+   ```
+3. Send a `GET http://localhost:5000/tasks` with your auth token:
+   - Check headers: 1st request shows `X-Cache: MISS`.
+   - 2nd and 3rd requests show `X-Cache: HIT` and response times drop significantly.
+4. Send a `POST http://localhost:5000/tasks` with a new task.
+5. Immediately send `GET http://localhost:5000/tasks`:
+   - Response header shows `X-Cache: MISS`, confirming cache was purged and freshly repopulated with the new task.
 
 ## Scripts
 

@@ -9,6 +9,7 @@ const Task = require('./models/Task');
 const User = require('./models/User');
 const authMiddleware = require('./middleware/auth');
 const validateTaskInput = require('./middleware/validateTask');
+const cache = require('./cache');
 
 const app = express();
 
@@ -159,9 +160,28 @@ app.get('/me', authMiddleware, async (req, res, next) => {
 // Apply authMiddleware to protect all /tasks routes
 app.use('/tasks', authMiddleware);
 
+// Cache key and invalidation helpers (Practical 9: In-Memory Caching)
+const getTaskCacheKey = (userId) => (userId ? `all_tasks_${userId}` : 'all_tasks');
+const invalidateTaskCache = (userId) => {
+    if (userId) {
+        cache.del(`all_tasks_${userId}`);
+    }
+    cache.del('all_tasks');
+};
+
 app.get('/tasks', async (req, res, next) => {
     try {
+        const cacheKey = getTaskCacheKey(req.user?.id);
+        const cached = cache.get(cacheKey);
+
+        if (cached) {
+            res.setHeader('X-Cache', 'HIT');
+            return res.status(200).json(cached);
+        }
+
         const tasks = await Task.find({ user: req.user.id }).sort({ createdAt: -1 });
+        cache.set(cacheKey, tasks);
+        res.setHeader('X-Cache', 'MISS');
         res.status(200).json(tasks);
     } catch (err) {
         next(err);
@@ -190,6 +210,10 @@ app.post('/tasks', validateTaskInput, async (req, res, next) => {
             ...req.body,
             user: req.user.id
         });
+
+        // Invalidate cache on write operation so stale data is never served
+        invalidateTaskCache(req.user?.id);
+
         res.status(201).json(task);
     } catch (err) {
         next(err);
@@ -216,6 +240,9 @@ app.put('/tasks/:id', validateTaskId, validateTaskInput, async (req, res, next) 
             });
         }
 
+        // Invalidate cache on write operation so stale data is never served
+        invalidateTaskCache(req.user?.id);
+
         res.status(200).json(task);
     } catch (err) {
         next(err);
@@ -231,6 +258,9 @@ app.delete('/tasks/:id', validateTaskId, async (req, res, next) => {
                 error: 'Task not found'
             });
         }
+
+        // Invalidate cache on write operation so stale data is never served
+        invalidateTaskCache(req.user?.id);
 
         res.status(200).json({
             message: 'Task deleted successfully',
