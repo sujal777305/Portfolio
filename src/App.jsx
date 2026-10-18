@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
-import Home from './pages/Home.jsx';
-import ProjectsPage from './pages/ProjectsPage.jsx';
-import Contact from './pages/Contact.jsx';
-import NotFound from './pages/NotFound.jsx';
 import './App.css';
+
+// Route-based code splitting using React.lazy() for performance optimization
+const Home = lazy(() => import('./pages/Home.jsx'));
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage.jsx'));
+const Contact = lazy(() => import('./pages/Contact.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
 /**
  * App Component
@@ -67,13 +69,22 @@ function App() {
       <Header name={studentInfo.name} isLightMode={isLightMode} onToggleTheme={toggleTheme} />
 
       <main className="main-content">
-        <Routes>
-          <Route path="/" element={<Home studentInfo={studentInfo} skillsList={skillsList} />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/contact" element={<Contact />} />
-          {/* Catch-all route for unknown paths */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense
+          fallback={
+            <div className="spinner-wrapper" role="status" aria-live="polite" style={{ minHeight: '50vh' }}>
+              <div className="spinner" aria-hidden="true" />
+              <p className="spinner-text">Loading page...</p>
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Home studentInfo={studentInfo} skillsList={skillsList} />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/contact" element={<Contact />} />
+            {/* Catch-all route for unknown paths */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {/* Footer is shared across every route */}
