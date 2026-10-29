@@ -9,6 +9,7 @@ React + Vite multi-page student portfolio for CHARUSAT practicals.
 - **Practical 3:** GitHub REST API integration on the Projects page with loading & error states
 - **Practical 8:** Performance Optimization and Lazy Loading with `React.lazy()` and `Suspense`
 - **Practical 9:** In-Memory Caching and Query Optimization using `node-cache` (TTL & Invalidation)
+- **Practical 10:** Asynchronous Processing with Event-Driven Architecture using native Node.js `EventEmitter`
 
 ## Practical 3 — API Integration
 
@@ -205,6 +206,143 @@ Measured using 3 repeated sample readings for each condition on `GET /tasks`:
 4. Send a `POST http://localhost:5000/tasks` with a new task.
 5. Immediately send `GET http://localhost:5000/tasks`:
    - Response header shows `X-Cache: MISS`, confirming cache was purged and freshly repopulated with the new task.
+
+## Practical 10 — Asynchronous Processing with Event-Driven Architecture
+
+### Objective
+To implement asynchronous background processing using Node.js native `EventEmitter` without external dependencies, decoupling notification side-effects from the critical HTTP request-response cycle and demonstrating non-blocking execution using timestamp evidence.
+
+### Architecture & Event Flow
+
+```
+POST /tasks request
+  │
+  ▼
+Save task to MongoDB
+  │
+  ▼
+Send API HTTP Response (201 Created) ──► Client receives immediate response (~8–60ms)
+  │
+  ▼ (Asynchronously handled in background via Node.js Event Loop)
+emit('task-created', taskData)
+  │
+  ▼
+Notification Listener (listeners.js)
+  └── [2s simulated delay] ──► Logs: task title, timestamp, assigned user
+
+DELETE /tasks/:id request
+  │
+  ▼
+Delete task in MongoDB ──► Send API Response (200 OK) ──► Client receives immediate response
+  │
+  ▼ (Asynchronously handled)
+emit('task-deleted', taskData) ──► Notification Listener (1s delay)
+```
+
+### Implementation Details
+
+1. **Custom EventEmitter Singleton** ([`backend/events.js`](file:///d:/student-portfolio/backend/events.js)):
+   ```javascript
+   const EventEmitter = require('events');
+
+   class TaskEvents extends EventEmitter {}
+
+   module.exports = new TaskEvents();
+   ```
+
+2. **Dedicated Event Listeners Module** ([`backend/listeners.js`](file:///d:/student-portfolio/backend/listeners.js)):
+   - Registered once at server startup (`require('./listeners')` in [`backend/server.js`](file:///d:/student-portfolio/backend/server.js)).
+   - **`task-created` listener**: Simulates a 2000 ms background notification dispatch (e.g. email or mobile push notification) using `setTimeout`. Wraps execution in `try/catch` and routes errors to the `error` event.
+   - **`task-deleted` listener** *(Supplementary 1)*: Simulates a 1000 ms asynchronous deletion audit log.
+   - **`error` listener** *(Supplementary 2)*: Catches errors thrown inside background event handlers, preventing unhandled error crashes.
+   ```javascript
+   taskEvents.on('task-created', (task) => {
+       console.log(`[Event Received] 'task-created' event caught by listener at ${new Date().toISOString()}`);
+       setTimeout(() => {
+           try {
+               if (!task || !task.title) throw new Error('Invalid task payload');
+               console.log(`[Notification] Task "${task.title}" created at ${new Date().toISOString()} (Assigned User: ${task.user})`);
+           } catch (err) {
+               taskEvents.emit('error', err);
+           }
+       }, 2000);
+   });
+   ```
+
+3. **Non-Blocking Controller Integration** ([`backend/server.js`](file:///d:/student-portfolio/backend/server.js)):
+   - Inside `POST /tasks` and `DELETE /tasks/:id`, the response `res.status(201).json(task)` is executed **before** calling `taskEvents.emit(...)`:
+   ```javascript
+   // Immediate API response sent to client
+   console.log(`[API] Response sent at ${new Date().toISOString()}`);
+   res.status(201).json(task);
+
+   // Emit event asynchronously after sending the response
+   taskEvents.emit('task-created', task);
+   ```
+
+### Empirical Timestamp Evidence (Console Output)
+
+Actual execution timestamps recorded during automated test execution demonstrating response-before-handler ordering:
+
+| Event / Step | Recorded Timestamp (ISO) | Elapsed from Request | Description |
+|---|---|---|---|
+| **POST /tasks incoming** | `2026-10-29T05:24:04.961Z` | 0 ms | Express route handler receives request |
+| **API Response Sent** | `2026-10-29T05:24:04.964Z` | **3 ms** | `res.status(201).json(task)` completed |
+| **Client Receives 201** | `2026-10-29T05:24:04.967Z` | **6 ms** | Client receives full response (roundtrip 8 ms) |
+| **Event Caught by Listener** | `2026-10-29T05:24:04.965Z` | 4 ms | `taskEvents.on('task-created')` handler invoked |
+| **Background Notification Logged** | `2026-10-29T05:24:06.979Z` | **2018 ms** | Background listener finishes simulated 2s delay |
+| **DELETE /tasks/:id Response** | `2026-10-29T05:24:07.484Z` | **4 ms** | `res.status(200).json(...)` completed |
+| **Delete Notification Logged** | `2026-10-29T05:24:08.486Z` | **1006 ms** | Background deletion listener finishes 1s delay |
+
+**Conclusion:** The API response was sent at `05:24:04.964Z`, allowing the client to complete in **8 ms**, while the background notification finished executing **2.015 seconds later** at `05:24:06.979Z`. This confirms non-blocking decoupled execution.
+
+### Key Questions & Analysis (Viva Preparation)
+
+1. **Why does emitting an event not block the API response, even though both run on the same Node.js process?**
+   - In Node.js, `EventEmitter.emit()` executes its listener synchronously on the same thread unless the listener itself schedules asynchronous work. By scheduling background tasks via timers (`setTimeout`), I/O, or promises inside the listener, the callback is offloaded to the Node.js event loop's timer phase. The synchronous call stack immediately pops, allowing the HTTP response write buffer to flush to the client socket without waiting for the delayed timer callback.
+
+2. **What would happen to API response time if the notification logic were placed directly inside the POST route instead of in an event handler?**
+   - If notification logic (such as sending an email, push notification, or making a third-party API request taking 1–2 seconds) were placed directly inside `POST /tasks` before `res.json()`, the HTTP client would be blocked for the entire duration (e.g., response time would jump from ~8 ms to >2,000 ms). This degrades user experience and ties up server connections unnecessarily.
+
+3. **Why is EventEmitter a reasonable choice for this scale of application, but not for a production system handling millions of events per day?**
+   - **Why reasonable for this scale:** `EventEmitter` is built into the Node.js core library with zero dependencies, minimal overhead, zero configuration, and straightforward in-process memory pub/sub messaging.
+   - **Why unsuitable for high-throughput enterprise systems:**
+     - *In-Memory Only:* If the Node.js process restarts, crashes, or is deployed while an event is in flight, the pending background jobs are permanently lost (no message persistence).
+     - *No Horizontal Distribution:* In a clustered or multi-instance deployment (e.g., Kubernetes, PM2), events emitted on Instance A cannot be received or processed by listeners on Instance B.
+     - *No Backpressure or Rate Limiting:* High burst volume can overwhelm process RAM and CPU, whereas distributed message brokers like **RabbitMQ**, **Apache Kafka**, or **BullMQ (Redis)** provide persistent storage, worker pools, retries, dead-letter queues, and horizontal worker scaling.
+
+### How to Check and Test Changes
+
+#### Method 1: Automated Test Script
+1. Ensure MongoDB service is running (`net start MongoDB` or verify Windows service).
+2. Start the backend server in one terminal:
+   ```bash
+   cd backend
+   node server.js
+   ```
+3. Run the automated test script in another terminal:
+   ```bash
+   cd backend
+   npm test
+   # OR
+   node test-practical10.js
+   ```
+4. Observe the terminal output:
+   - Client response completes in ~10–50 ms.
+   - Backend console prints the `[API] Response sent` line first, followed 2 seconds later by `[Notification] Task "..." created`.
+
+#### Method 2: Manual Testing via Postman or Thunder Client
+1. Register/Login via `POST http://localhost:5000/login` to get a JWT token.
+2. Send `POST http://localhost:5000/tasks` with header `Authorization: Bearer <token>` and body:
+   ```json
+   {
+     "title": "Manual Test Task",
+     "priority": "high"
+   }
+   ```
+3. Observe in Postman that the response arrives immediately (201 Created in < 50ms).
+4. Look at your server terminal window: observe `[API] Response sent`, followed 2 seconds later by `[Notification] Task "Manual Test Task" created`.
+5. Send `DELETE http://localhost:5000/tasks/<taskId>` and observe immediate 200 OK, followed 1 second later by `[Notification] Task "..." deleted`.
 
 ## Scripts
 

@@ -10,6 +10,8 @@ const User = require('./models/User');
 const authMiddleware = require('./middleware/auth');
 const validateTaskInput = require('./middleware/validateTask');
 const cache = require('./cache');
+const taskEvents = require('./events');
+require('./listeners'); // Practical 10: Register event listeners at server startup
 
 const app = express();
 
@@ -214,7 +216,12 @@ app.post('/tasks', validateTaskInput, async (req, res, next) => {
         // Invalidate cache on write operation so stale data is never served
         invalidateTaskCache(req.user?.id);
 
+        // Immediate API response (201 Created)
+        console.log(`[API] Response sent at ${new Date().toISOString()}`);
         res.status(201).json(task);
+
+        // Emit task-created event asynchronously after sending the response
+        taskEvents.emit('task-created', task);
     } catch (err) {
         next(err);
     }
@@ -262,10 +269,15 @@ app.delete('/tasks/:id', validateTaskId, async (req, res, next) => {
         // Invalidate cache on write operation so stale data is never served
         invalidateTaskCache(req.user?.id);
 
+        // Immediate API response (200 OK)
+        console.log(`[API] Delete response sent at ${new Date().toISOString()}`);
         res.status(200).json({
             message: 'Task deleted successfully',
             task
         });
+
+        // Emit task-deleted event asynchronously after sending the response
+        taskEvents.emit('task-deleted', task);
     } catch (err) {
         next(err);
     }
