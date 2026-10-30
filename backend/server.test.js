@@ -56,4 +56,30 @@ describe('Practical 12: Task Management REST API CI/CD Automated Tests', () => {
         expect(res.statusCode).toBe(400);
         expect(res.body).toHaveProperty('error', 'Email and password are required');
     });
+
+    /**
+     * Practical 13 AI Integration Tests:
+     */
+    describe('Practical 13: AI Service Integration & Graceful Degradation', () => {
+        test('POST /api/ai/generate-description returns 200 with generated/fallback description', async () => {
+            const res = await request(app)
+                .post('/api/ai/generate-description')
+                .send({ title: 'Complete Docker setup for project' });
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body).toHaveProperty('description');
+            expect(typeof res.body.description).toBe('string');
+            expect(res.body.description.length).toBeGreaterThan(0);
+            expect(res.body).toHaveProperty('fallback');
+        });
+
+        test('POST /api/ai/generate-description returns 400 when title is missing or empty', async () => {
+            const res = await request(app)
+                .post('/api/ai/generate-description')
+                .send({});
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toHaveProperty('error');
+        });
+    });
 });

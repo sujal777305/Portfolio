@@ -14,6 +14,7 @@ React + Vite multi-page student portfolio for CHARUSAT practicals.
 - **Practical 10:** Asynchronous Processing with Event-Driven Architecture using native Node.js `EventEmitter`
 - **Practical 11:** Containerization with Docker and Multi-Container Orchestration using Docker Compose
 - **Practical 12:** CI/CD Pipeline with GitHub Actions (Automated Linting, Testing, and Build Verification)
+- **Practical 13:** AI API Integration into a Web Application (OpenAI / Gemini, Graceful Degradation, Rate Limiting, and Responsible AI)
 
 ## Practical 3 — API Integration
 
@@ -664,6 +665,121 @@ GitHub Status Check Result:
 | `npm test` fails with 'no test specified' | `package.json` test script missing | Set `"test": "jest --runInBand --forceExit"` in `backend/package.json`. |
 | Pipeline passes even with a broken test | Test logic does not assert expected values | Verify assertion `expect(...)` is actively executing. |
 
+## Practical 13 — AI API Integration into a Web Application
+
+### Objective
+To securely integrate an external AI service (OpenAI / Google Gemini) into the Task Management full-stack application from the Node/Express backend, implement architectural graceful degradation when external services fail, enforce rate limiting, and understand responsible AI data governance.
+
+### Architecture & Data Flow Diagram
+
+```
+React Frontend (User enters Title: "Fix Docker build issue")
+  │
+  ▼ User clicks "✨ Generate with AI"
+POST /api/ai/generate-description (Bearer Token / JSON payload)
+  │
+  ▼
+Express Backend (/api/ai/generate-description)
+  ├── 1. Rate Limit Check (Cooldown: max 1 request per 15s per client)
+  ├── 2. Inspect Server-side Environment (.env - NEVER exposed to frontend)
+  │      ├── Case A: OPENAI_API_KEY present ──► OpenAI SDK (gpt-4o-mini)
+  │      ├── Case B: GEMINI_API_KEY present ──► Google Gemini API (gemini-1.5-flash)
+  │      └── Case C: Key missing / invalid ──► Smart Rule-Based Contextual Fallback
+  │
+  ▼ External API Error / Network Timeout / Quota Exceeded?
+Catch Error ──► Graceful Degradation (Fallback Response - HTTP 200)
+  │
+  ▼
+JSON Response { description: "...", fallback: boolean, provider: "..." }
+  │
+  ▼
+React Frontend Form
+  ├── Replaces Description textarea with the editable suggestion
+  ├── Displays interactive AI Disclaimer: "🤖 AI Suggestion: Please review before saving"
+  └── Retains full user editing control (student can accept, tweak, or overwrite)
+```
+
+### Implementation Details
+
+1. **Backend AI Route & Controller** ([`backend/server.js`](file:///backend/server.js)):
+   - Configured `POST /api/ai/generate-description` and `POST /ai/generate-description`.
+   - Uses official `openai` SDK (`gpt-4o-mini`) and native fetch for Gemini.
+   - All secret API keys are kept strictly in `backend/.env` and referenced via `process.env`.
+   - **Never Exposed to Frontend**: Browser network inspector only ever sees requests to the local Express backend (`http://localhost:5000/api/ai/generate-description`), keeping third-party credentials secure.
+
+2. **Graceful Degradation Design**:
+   - If an API key is missing, expired, invalid, or hits a rate limit/network timeout, the backend catches the error without throwing an unhandled exception or breaking the HTTP connection.
+   - It responds with a contextual template based on the task title (e.g. for keywords like `docker`, `bug`, `study`) and sets `{ fallback: true }`, ensuring the user can still create and save tasks without interruption.
+
+3. **Rate Limiting (Supplementary Problem)**:
+   - Configured an in-memory client tracker enforcing a cooldown window between AI requests.
+   - If requested repeatedly, returns HTTP `429 Too Many Requests` with a clear user notice (`Please wait Xs before generating another suggestion.`).
+
+4. **Frontend UI Integration** ([`src/components/Projects.jsx`](file:///src/components/Projects.jsx) & [`src/App.css`](file:///src/App.css)):
+   - **AI Trigger Button**: "✨ Generate with AI" button positioned directly beside the Description field label.
+   - **Loading State**: Disables the button and shows a spinner (`ai-btn-spinner`) with "Generating..." while waiting for the model.
+   - **Editable Suggestion**: Injects the generated text into the controlled `<textarea>` so the user maintains full autonomy over the final task data.
+   - **AI Disclaimer Banner**: Displays a distinct banner in the UI:
+     `🤖 AI Suggestion: This description was AI-generated. Review and edit before saving.`
+
+---
+
+### Step-by-Step Lab Demonstration Guide
+
+#### Demonstration 1: Successful AI Generation (or Smart Fallback)
+1. Start the full application (or start MongoDB + `cd backend && node server.js` and `npm run dev`).
+2. Log in with your account on the **Projects (Task Manager)** page.
+3. In the Task Creation form, type a title, e.g.:
+   `"Implement Docker container orchestration"`
+4. Click the **"✨ Generate with AI"** button.
+5. Observe the loading spinner activates.
+6. The Description textarea fills automatically with a concise, actionable task description.
+7. Notice the **🤖 AI Suggestion disclaimer banner** appears above the description.
+8. Edit the text to customize it and click **"Add Task"** to save.
+
+#### Demonstration 2: Demonstrating Graceful Degradation (Broken/Invalid Key)
+1. In `backend/.env`, set an invalid dummy key:
+   ```env
+   OPENAI_API_KEY=invalid_dummy_broken_key_12345
+   ```
+2. Restart the backend server (`node server.js`).
+3. On the frontend, click **"✨ Generate with AI"** for any task title.
+4. **Observe the app does NOT crash**:
+   - The backend catches the 401 Unauthorized from OpenAI.
+   - It gracefully falls back to the contextual template generator.
+   - The frontend displays the suggestion and alerts: `AI API unavailable — provided smart contextual template.`
+   - The student can still edit the text and add the task smoothly.
+
+---
+
+### Key Questions & Analysis (Viva Preparation)
+
+1. **Why must the AI API key be called from the backend rather than directly from the React frontend?**
+   - Frontend JavaScript code is downloaded, parsed, and executed inside the client's browser. Any environment variable (`VITE_OPENAI_KEY`) or string embedded in frontend code is completely exposed in browser memory, source files, and Network DevTools request headers. Malicious users can steal the API key, burn your usage quotas, rack up financial bills, or abuse the model. Calling from the backend keeps the secret key safely on the server and allows you to enforce authentication, rate limiting, and content moderation.
+
+2. **What does 'graceful degradation' mean in this context, and why does it matter for a feature that depends on a third-party service outside your control?**
+   - **Graceful degradation** is an architectural pattern where a system continues to operate in a reduced or fallback capacity when an external component or third-party service fails, rather than completely crashing or blocking the user.
+   - Because third-party AI APIs are subject to internet outages, provider downtime, rate limits, latency spikes, and quota exhaustion, an application must never let an AI failure block primary core functionality (such as creating or managing tasks).
+
+3. **What are the privacy and governance implications of sending task data to an external AI API, and what kind of data should never be sent this way?**
+   - **Data Governance & Privacy Risks:** Commercial AI providers may log prompts, use them to train future foundation models (unless zero-data-retention enterprise agreements exist), or expose data to server logging and third-party sub-processors.
+   - **Data that should NEVER be sent:**
+     - Personally Identifiable Information (PII) like national IDs, phone numbers, home addresses.
+     - Confidential corporate secrets, proprietary source code, or internal intellectual property.
+     - Authentication credentials, database connection strings, passwords, or private API keys.
+     - Protected Health Information (PHI) or financial account details (credit card numbers).
+
+---
+
+### Troubleshooting Guide
+
+| Symptom | Probable Cause | Fix |
+|---|---|---|
+| `401 Unauthorized from OpenAI / Gemini` | Invalid, expired, or missing API key | Check key in `backend/.env`; ensure variable name matches `OPENAI_API_KEY` or `GEMINI_API_KEY`. |
+| API key visible in browser DevTools Network tab | AI called directly from React | Route the call through backend `/api/ai/generate-description`. |
+| App crashes when AI call fails | Missing `try/catch` around external API call | Wrap external API calls in `try/catch` and return `{ description: fallback, fallback: true }`. |
+| Rate limit error (`429`) | Too many requests within cooldown | Wait 15 seconds before clicking "Generate with AI" again. |
+
 ## Scripts
 
 | Command | Description |
@@ -681,6 +797,7 @@ GitHub Status Check Result:
 - React 19 + Vite
 - Node.js + Express
 - MongoDB + Mongoose
+- OpenAI API & Google Gemini API
 - Docker & Docker Compose
 - GitHub Actions CI/CD
 - Jest & Supertest

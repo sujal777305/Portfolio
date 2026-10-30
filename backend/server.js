@@ -172,6 +172,147 @@ app.get('/me', authMiddleware, async (req, res, next) => {
 });
 
 // ==========================================
+// AI ASSISTANT ROUTES (Practical 13)
+// ==========================================
+
+const OpenAI = require('openai');
+
+// In-memory rate limiting map: identifier -> timestamp of last request
+// Supplementary requirement: max 1 AI request per task/client per cooldown window
+const aiRateLimitMap = new Map();
+
+function generateFallbackDescription(title) {
+    const t = (title || '').toLowerCase();
+    if (t.includes('bug') || t.includes('fix') || t.includes('error')) {
+        return `Investigate root cause in logs, reproduce locally, implement solution, and write unit tests for: ${title}.`;
+    }
+    if (t.includes('study') || t.includes('exam') || t.includes('read') || t.includes('learn')) {
+        return `Review syllabus topics, prepare summary notes, practice sample questions, and verify comprehension for: ${title}.`;
+    }
+    if (t.includes('docker') || t.includes('deploy') || t.includes('ci') || t.includes('cd')) {
+        return `Configure deployment definitions, verify container build and network orchestration, and execute end-to-end tests for: ${title}.`;
+    }
+    if (t.includes('meeting') || t.includes('presentation')) {
+        return `Prepare presentation slides, compile project metrics, and discuss roadmap deliverables for: ${title}.`;
+    }
+    return `Plan implementation steps, complete all required deliverables, and verify acceptance criteria for: ${title}.`;
+}
+
+async function handleGenerateDescription(req, res) {
+    try {
+        const { title } = req.body || {};
+
+        if (!title || typeof title !== 'string' || title.trim().length === 0) {
+            return res.status(400).json({
+                error: 'Task title is required to generate a description'
+            });
+        }
+
+        // Rate limiting check: 1 request every 15 seconds per client
+        const clientId = req.ip || req.headers['x-forwarded-for'] || 'client';
+        const now = Date.now();
+        const lastRequest = aiRateLimitMap.get(clientId);
+        if (lastRequest && (now - lastRequest < 15000) && process.env.NODE_ENV !== 'test') {
+            const waitSec = Math.ceil((15000 - (now - lastRequest)) / 1000);
+            return res.status(429).json({
+                error: `Rate limit exceeded. Please wait ${waitSec}s before generating another suggestion.`,
+                rateLimited: true,
+                retryAfter: waitSec
+            });
+        }
+        aiRateLimitMap.set(clientId, now);
+
+        // 1. Try OpenAI if API key is provided and valid
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (openaiKey && openaiKey !== 'your_key_here' && openaiKey !== 'your_openai_api_key_here' && !openaiKey.includes('placeholder')) {
+            try {
+                const client = new OpenAI({ apiKey: openaiKey });
+                const completion = await client.chat.completions.create({
+                    model: 'gpt-4o-mini',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are an AI task assistant. Output a concise 2-sentence actionable description for the task title. Do not include quotes or intro text.'
+                        },
+                        {
+                            role: 'user',
+                            content: `Write a short task description for: ${title.trim()}`
+                        }
+                    ],
+                    max_tokens: 120,
+                    temperature: 0.7
+                });
+
+                const aiText = completion.choices?.[0]?.message?.content?.trim();
+                if (aiText) {
+                    return res.status(200).json({
+                        description: aiText,
+                        fallback: false,
+                        provider: 'openai-gpt-4o-mini'
+                    });
+                }
+            } catch (aiErr) {
+                console.warn('OpenAI API call failed, falling back gracefully:', aiErr.message);
+                // Graceful degradation: fall through to fallback
+            }
+        }
+
+        // 2. Try Google Gemini if GEMINI_API_KEY is provided
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (geminiKey && geminiKey !== 'your_key_here' && geminiKey !== 'your_gemini_api_key_here' && !geminiKey.includes('placeholder')) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+                const geminiRes = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: `Write a concise 2-sentence actionable task description for: "${title.trim()}". Return only the description text.`
+                            }]
+                        }]
+                    })
+                });
+
+                const data = await geminiRes.json();
+                const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                if (aiText) {
+                    return res.status(200).json({
+                        description: aiText,
+                        fallback: false,
+                        provider: 'gemini-1.5-flash'
+                    });
+                }
+            } catch (geminiErr) {
+                console.warn('Gemini API call failed, falling back gracefully:', geminiErr.message);
+                // Graceful degradation: fall through to fallback
+            }
+        }
+
+        // 3. Graceful degradation: Return smart contextual fallback
+        const fallbackText = generateFallbackDescription(title);
+        return res.status(200).json({
+            description: fallbackText,
+            fallback: true,
+            provider: 'rule-based-fallback',
+            message: 'AI API unavailable or unconfigured. Provided contextual template.'
+        });
+
+    } catch (err) {
+        // Ultimate safety catch: never crash the core app (Graceful degradation)
+        console.error('AI route error:', err.message);
+        return res.status(200).json({
+            description: generateFallbackDescription(req.body?.title),
+            fallback: true,
+            error: err.message
+        });
+    }
+}
+
+app.post('/api/ai/generate-description', handleGenerateDescription);
+app.post('/ai/generate-description', handleGenerateDescription);
+
+// ==========================================
 // TASK ROUTES (Protected by Auth & Validation Middleware)
 // ==========================================
 

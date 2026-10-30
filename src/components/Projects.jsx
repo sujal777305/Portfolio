@@ -11,6 +11,7 @@ import {
   getMe,
   logoutUser,
   getToken,
+  generateTaskDescription,
 } from '../api.js';
 
 /**
@@ -43,6 +44,10 @@ function Projects() {
   const [priority, setPriority] = useState('medium');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Practical 13: AI Assistant States
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiDisclaimer, setAiDisclaimer] = useState(false);
 
   // Deletion Modal State
   const [taskToDelete, setTaskToDelete] = useState(null);
@@ -350,6 +355,43 @@ function Projects() {
     setDescription('');
     setPriority('medium');
     setEditingTaskId(null);
+    setAiDisclaimer(false);
+    setAiLoading(false);
+  };
+
+  // Practical 13: Handle AI Task Description Generation
+  const handleGenerateAIDescription = async () => {
+    if (!title.trim()) {
+      showToast('Please enter a task title first so AI has context!', 'error');
+      return;
+    }
+
+    try {
+      setAiLoading(true);
+      const data = await generateTaskDescription(title.trim());
+
+      if (data?.description) {
+        // Set returned description as an editable suggestion
+        setDescription(data.description);
+        setAiDisclaimer(true);
+
+        if (data.fallback) {
+          showToast(data.message || 'AI API unavailable — provided smart contextual template.', 'info');
+        } else {
+          showToast(`✨ AI description generated via ${data.provider || 'AI'}! Review and edit below.`, 'success');
+        }
+      } else {
+        showToast('Could not generate description. Please enter one manually.', 'error');
+      }
+    } catch (err) {
+      if (err.status === 429) {
+        showToast(err.message || 'AI rate limit exceeded. Please wait a moment before trying again.', 'error');
+      } else {
+        showToast(`AI generation error: ${err.message || 'Service unavailable'}. Please type manually.`, 'error');
+      }
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   // Filter tasks based on Search, Status, and Priority
@@ -483,16 +525,54 @@ function Projects() {
               </div>
 
               <div className="form-group">
-                <label htmlFor="task-desc">Description</label>
+                <div className="label-with-ai-action">
+                  <label htmlFor="task-desc">Description</label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAIDescription}
+                    disabled={aiLoading || submitting || !title.trim()}
+                    className="btn-ai-generate"
+                    title={title.trim() ? "Auto-generate actionable description with AI" : "Enter a task title first"}
+                  >
+                    {aiLoading ? (
+                      <>
+                        <span className="ai-btn-spinner" aria-hidden="true" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden="true">✨</span>
+                        <span>Generate with AI</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   id="task-desc"
                   rows={3}
-                  placeholder="Add more details about this task..."
+                  placeholder="Add more details about this task, or click 'Generate with AI'..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   maxLength={500}
                   disabled={submitting}
                 />
+                {aiDisclaimer && (
+                  <div className="ai-disclaimer-banner" role="status">
+                    <span className="ai-badge">🤖 AI Suggestion</span>
+                    <span className="ai-disclaimer-text">
+                      This description was AI-generated. Review and edit before saving.
+                    </span>
+                    <button
+                      type="button"
+                      className="ai-dismiss-btn"
+                      onClick={() => setAiDisclaimer(false)}
+                      title="Dismiss disclaimer"
+                      aria-label="Dismiss AI suggestion note"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="form-row">

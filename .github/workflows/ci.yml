@@ -54,3 +54,4 @@ jobs:
           NODE_ENV: test
           JWT_SECRET: supersecretjwtkey_practical7_2026
         run: npm test
+

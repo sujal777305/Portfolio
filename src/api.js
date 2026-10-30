@@ -162,3 +162,22 @@ export async function deleteTask(id) {
   });
   return handleResponse(res);
 }
+
+/**
+ * Generate an AI task description based on task title (Practical 13)
+ * Calls Express backend (/api/ai/generate-description).
+ * Never exposes AI API keys on the frontend.
+ * @param {string} title - Task Title
+ * @returns {Promise<{ description: string, fallback: boolean, provider?: string, message?: string }>}
+ */
+export async function generateTaskDescription(title) {
+  const res = await fetch(`${BASE_URL}/api/ai/generate-description`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ title }),
+  });
+  return handleResponse(res);
+}
