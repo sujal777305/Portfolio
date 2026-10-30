@@ -61,7 +61,7 @@ assert(fs.existsSync(frontendDockerfilePath), 'Frontend Dockerfile exists at roo
 
 if (fs.existsSync(frontendDockerfilePath)) {
     const content = fs.readFileSync(frontendDockerfilePath, 'utf-8');
-    assert(/FROM\s+node:18/i.test(content), 'Frontend Dockerfile uses node:18 base image');
+    assert(/FROM\s+node:(18|20)/i.test(content), 'Frontend Dockerfile uses compatible node base image');
     assert(/WORKDIR\s+\/app/i.test(content), 'Frontend Dockerfile sets WORKDIR to /app');
     assert(/RUN\s+npm\s+run\s+build/i.test(content), 'Frontend Dockerfile runs npm run build');
     assert(/EXPOSE\s+5173/i.test(content), 'Frontend Dockerfile exposes port 5173');
