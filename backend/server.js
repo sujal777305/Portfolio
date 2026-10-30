@@ -47,8 +47,9 @@ const validateTaskId = (req, res, next) => {
 };
 
 // Database Connection
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('MongoDB connected'))
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongodb:27017/task-management';
+mongoose.connect(MONGO_URI)
+    .then(() => console.log(`MongoDB connected: ${MONGO_URI}`))
     .catch((err) => console.error('MongoDB connection error:', err.message));
 
 // ==========================================
@@ -317,6 +318,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(5000, () => {
-    console.log('Server running on port 5000');
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
 });

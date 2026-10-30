@@ -10,6 +10,7 @@ React + Vite multi-page student portfolio for CHARUSAT practicals.
 - **Practical 8:** Performance Optimization and Lazy Loading with `React.lazy()` and `Suspense`
 - **Practical 9:** In-Memory Caching and Query Optimization using `node-cache` (TTL & Invalidation)
 - **Practical 10:** Asynchronous Processing with Event-Driven Architecture using native Node.js `EventEmitter`
+- **Practical 11:** Containerization with Docker and Multi-Container Orchestration using Docker Compose
 
 ## Practical 3 — API Integration
 
@@ -344,6 +345,167 @@ Actual execution timestamps recorded during automated test execution demonstrati
 4. Look at your server terminal window: observe `[API] Response sent`, followed 2 seconds later by `[Notification] Task "Manual Test Task" created`.
 5. Send `DELETE http://localhost:5000/tasks/<taskId>` and observe immediate 200 OK, followed 1 second later by `[Notification] Task "..." deleted`.
 
+## Practical 11 — Containerization with Docker and Docker Compose
+
+### Objective
+To containerize the full-stack Task Management application using Docker and orchestrate all multi-tier services (React frontend, Node/Express backend, and MongoDB database) using Docker Compose with isolated inter-container networking and volume persistence.
+
+### Architecture & Multi-Container Network Topology
+
+```
+docker-compose.yml
+ ├── frontend (React + Vite Preview, container port 5173 ──► host port 5173)
+ ├── backend  (Node/Express, container port 5000 ──────────► host port 5000)
+ └── mongodb  (Official MongoDB, container port 27017 ────► host port 27017)
+
+Network: app-network (custom bridge network)
+ Host Browser (http://localhost:5173) ──► Frontend Container
+ Host Browser / API (http://localhost:5000) ──► Backend Container
+ Backend Container ──► mongodb://mongodb:27017/task-management (DNS resolution)
+
+Volume: mongo-data ──► /data/db (Persistent database storage across container restarts)
+```
+
+### Implementation Details
+
+1. **Backend Dockerfile** ([`backend/Dockerfile`](file:///d:/student-portfolio/backend/Dockerfile)):
+   ```dockerfile
+   FROM node:18
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm install
+   COPY . .
+   EXPOSE 5000
+   CMD ["node", "server.js"]
+   ```
+
+2. **Frontend Dockerfile** ([`Dockerfile`](file:///d:/student-portfolio/Dockerfile)):
+   ```dockerfile
+   FROM node:18 AS build
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm install
+   COPY . .
+   RUN npm run build
+   EXPOSE 5173
+   CMD ["npm", "run", "preview", "--", "--host"]
+   ```
+
+3. **Docker Compose Orchestration** ([`docker-compose.yml`](file:///d:/student-portfolio/docker-compose.yml)):
+   - Orchestrates `frontend`, `backend`, and `mongodb` under a single command.
+   - Defines service dependency chains: `frontend` depends on `backend`, which depends on `mongodb`.
+   - Mounts named volume `mongo-data` to `/data/db`.
+   - Connects all containers to isolated bridge network `app-network`.
+
+4. **MongoDB Containerized Connection**:
+   - Configured `backend/server.js` and `docker-compose.yml` to resolve MongoDB via its service name:
+     `MONGO_URI=mongodb://mongodb:27017/task-management`.
+
+### Supplementary Problems Addressed
+
+1. **Build Context Optimization with `.dockerignore`**:
+   - Added `.dockerignore` in root and `backend/.dockerignore` to exclude `node_modules`, `.env`, and build artifacts from being copied into the build context, preventing bloated image sizes and credential leaks.
+
+2. **Multi-Stage Build for React Frontend** ([`Dockerfile.multistage`](file:///d:/student-portfolio/Dockerfile.multistage)):
+   - Separates the build stage from runtime image using `node:18-alpine`.
+   - Copies only the compiled `/app/dist` assets and production runner into the final container, discarding build tools and reducing the final Docker image footprint from ~1.2 GB to ~180 MB.
+
+3. **Persistent Storage with Named Volume**:
+   - Attached `mongo-data:/data/db` in `docker-compose.yml` so all created tasks, users, and database state persist across container stops, restarts, and image rebuilds.
+
+### Key Questions & Analysis (Viva Preparation)
+
+1. **Why does the backend container need to reference the MongoDB container by its service name (`mongodb`) rather than `localhost`?**
+   - In Docker, each container has its own isolated network namespace with its own `localhost` (`127.0.0.1`) loopback interface. If the backend references `localhost:27017`, it looks for MongoDB running inside the *same* backend container, which fails. In a user-defined Docker bridge network (`app-network`), Docker provides an automatic embedded DNS server that resolves container service names (e.g. `mongodb`) directly to their internal container IP addresses.
+
+2. **What is the difference between `EXPOSE` in a Dockerfile and the `ports` mapping in `docker-compose.yml`?**
+   - `EXPOSE` is informational metadata in the Dockerfile that documents which ports the containerized process listens on; it does *not* actually publish or make the port accessible to the host machine.
+   - `ports` in `docker-compose.yml` (e.g., `"5000:5000"`) establishes host-to-container port forwarding via `iptables` / NAT, allowing external traffic (such as your browser or Postman on `http://localhost:5000`) to enter the container.
+
+3. **Why is it considered bad practice to copy `node_modules` into a Docker image instead of running `npm install` inside the container?**
+   - **Host OS vs. Container OS Architecture:** Native binary dependencies (such as `bcrypt` or `node-gyp` modules) compiled on the host OS (e.g., Windows x64) will fail or crash when executed inside a Linux-based container (`node:18` Debian/Alpine).
+   - **Build Bloat:** Transferring tens of thousands of local dependency files significantly increases the Docker build context transfer time and invalidates Docker layer caching. Running `RUN npm install` inside the container ensures binary modules are compiled specifically for the container's OS environment and leverages Docker layer caching when `package*.json` is unchanged.
+
+### How to Run the Full Stack
+
+#### Prerequisites
+Make sure **Docker Desktop** is open and running on your system.
+
+#### Step 1: Start the Entire Application Stack
+In the project root directory, run:
+```bash
+docker-compose up --build
+# OR using modern Docker CLI:
+docker compose up --build
+```
+To run in detached (background) mode:
+```bash
+docker compose up -d --build
+```
+
+#### Step 2: Verify Running Containers
+In another terminal window:
+```bash
+docker ps
+```
+You will see all 3 containers with status `Up`:
+- `task-frontend` on `0.0.0.0:5173->5173/tcp`
+- `task-backend` on `0.0.0.0:5000->5000/tcp`
+- `task-mongodb` on `0.0.0.0:27017->27017/tcp`
+
+#### Step 3: Access the End-to-End Application
+- **Frontend Web App:** Open [http://localhost:5173](http://localhost:5173) in your browser.
+- **Backend REST API:** Open [http://localhost:5000/tasks](http://localhost:5000/tasks) or use Postman.
+- **MongoDB Database:** Connect via MongoDB Compass to `mongodb://localhost:27017`.
+
+#### Step 4: Stop the Stack
+To gracefully stop all containers:
+```bash
+docker compose down
+```
+To stop and remove persistent volumes (fresh reset):
+```bash
+docker compose down -v
+```
+
+### How to Test and Verify Changes
+
+#### Method 1: Automated Test Script
+Run the automated test script in the project root:
+```bash
+npm run test:practical11
+```
+This script performs 31 comprehensive checks validating:
+- Backend Dockerfile base image, working directory, instructions, and exposed ports.
+- Frontend Dockerfile build steps, preview server commands, and exposed ports.
+- Root and backend `.dockerignore` files excluding `node_modules` and `.env`.
+- `docker-compose.yml` service definitions, internal DNS naming, port mappings, custom bridge network, and named volume persistence.
+- Live HTTP connectivity to frontend (`:5173`) and backend (`:5000`).
+
+#### Method 2: Verifying MongoDB Data Persistence (Volume Test)
+1. Start stack with `docker compose up -d`.
+2. Open frontend at `http://localhost:5173` (or send POST via Postman to `http://localhost:5000/tasks`) and add a new task: `"Persistent Volume Test Task"`.
+3. Stop containers:
+   ```bash
+   docker compose down
+   ```
+4. Restart stack:
+   ```bash
+   docker compose up -d
+   ```
+5. Refresh `http://localhost:5173` or send `GET http://localhost:5000/tasks`:
+   - The task is still present, proving that the `mongo-data` named volume retained the data across container teardown and recreation.
+
+#### Method 3: Troubleshooting Common Issues
+
+| Issue / Symptom | Probable Cause | Solution |
+|---|---|---|
+| `failed to connect to docker API` | Docker Desktop is not started | Open Docker Desktop from the Start menu and wait until the status displays "Engine running". |
+| `Backend cannot connect to MongoDB` | Connection string uses `localhost` instead of Compose service name | In `docker-compose.yml`, pass `MONGO_URI: mongodb://mongodb:27017/task-management`. |
+| `Port 5000 or 5173 already in use` | Local Node process or previous container is still bound | Run `docker ps` to find and stop older containers, or terminate local `node` processes. |
+| `Build is slow / huge image size` | `node_modules` copied into context | Ensure `.dockerignore` exists with `node_modules` and `.env` listed. |
+| `Code changes not reflected` | Old cached image layers used | Run `docker-compose up --build` to force a rebuild of changed image layers. |
+
 ## Scripts
 
 | Command | Description |
@@ -351,11 +513,13 @@ Actual execution timestamps recorded during automated test execution demonstrati
 | `npm run dev` | Start Vite development server |
 | `npm run build` | Production build |
 | `npm run preview` | Preview production build |
+| `npm run test:practical11` | Automated test suite for Practical 11 Docker orchestration |
 
 ## Tech Stack
 
-- React 18+
-- Vite
+- React 19 + Vite
+- Node.js + Express
+- MongoDB + Mongoose
+- Docker & Docker Compose
 - React Router
-- Fetch API (GitHub REST)
 - CSS (custom design tokens, dark/light theme)

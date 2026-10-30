@@ -1,0 +1,22 @@
+# ==============================================================================
+# Practical 11 (Supplementary Problem): Multi-Stage Build for React Frontend
+# Reduces final container image size by separating build tools from static serving.
+# ==============================================================================
+
+# Stage 1: Build static production assets
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: Minimal runtime image serving production build via Vite preview
+FROM node:18-alpine AS runner
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --omit=dev && npm install vite
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/vite.config.js ./vite.config.js
+EXPOSE 5173
+CMD ["npm", "run", "preview", "--", "--host"]
