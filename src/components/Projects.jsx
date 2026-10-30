@@ -173,7 +173,7 @@ function Projects() {
         setAuthPassword('');
         showToast(`Welcome back, ${data.user.email}!`, 'success');
       } else {
-        const regData = await registerUser({ email: authEmail.trim(), password: authPassword.trim() });
+        await registerUser({ email: authEmail.trim(), password: authPassword.trim() });
         showToast('Registration successful! Logging you in...', 'success');
         // Auto-login after registration
         const loginData = await loginUser({ email: authEmail.trim(), password: authPassword.trim() });

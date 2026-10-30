@@ -12,7 +12,7 @@ const http = require('http');
  * 5. Console timestamps proving response-before-handler execution order.
  */
 
-const BASE_URL = 'http://localhost:5000';
+const _BASE_URL = 'http://localhost:5000';
 
 function makeRequest(options, postData) {
     return new Promise((resolve, reject) => {
@@ -23,7 +23,7 @@ function makeRequest(options, postData) {
                 let parsed = data;
                 try {
                     parsed = JSON.parse(data);
-                } catch (e) {
+                } catch {
                     // keep raw string if not JSON
                 }
                 resolve({ statusCode: res.statusCode, headers: res.headers, data: parsed });

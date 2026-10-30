@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:practical11": "node test-practical11.js"
+    "test": "npm --prefix backend test",
+    "test:practical11": "node test-practical11.js",
+    "test:practical12": "npm --prefix backend test"
   },
   "dependencies": {
     "react": "^19.2.7",

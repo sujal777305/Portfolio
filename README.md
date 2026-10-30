@@ -1,5 +1,7 @@
 # Student Portfolio — Advanced Web Development Frameworks (ITUE301)
 
+[![CI Pipeline](https://github.com/sujal777305/Portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/sujal777305/Portfolio/actions/workflows/ci.yml)
+
 React + Vite multi-page student portfolio for CHARUSAT practicals.
 
 ## Features
@@ -11,6 +13,7 @@ React + Vite multi-page student portfolio for CHARUSAT practicals.
 - **Practical 9:** In-Memory Caching and Query Optimization using `node-cache` (TTL & Invalidation)
 - **Practical 10:** Asynchronous Processing with Event-Driven Architecture using native Node.js `EventEmitter`
 - **Practical 11:** Containerization with Docker and Multi-Container Orchestration using Docker Compose
+- **Practical 12:** CI/CD Pipeline with GitHub Actions (Automated Linting, Testing, and Build Verification)
 
 ## Practical 3 — API Integration
 
@@ -506,6 +509,161 @@ This script performs 31 comprehensive checks validating:
 | `Build is slow / huge image size` | `node_modules` copied into context | Ensure `.dockerignore` exists with `node_modules` and `.env` listed. |
 | `Code changes not reflected` | Old cached image layers used | Run `docker-compose up --build` to force a rebuild of changed image layers. |
 
+## Practical 12 — CI/CD Pipeline with GitHub Actions
+
+### Objective
+To automate code quality verification, automated testing, and build validation of the full-stack Task Management application using a Continuous Integration (CI) pipeline configured via GitHub Actions.
+
+### Architecture & Pipeline Workflow
+
+```
+Developer Action: git push origin main OR Pull Request targeting main
+  │
+  ▼
+GitHub Actions Trigger (on: push / pull_request)
+  │
+  ▼
+Job 1: lint (Code Quality & Static Analysis)
+  ├── Checkout code (actions/checkout@v4)
+  ├── Setup Node.js 20 (actions/setup-node@v4)
+  ├── npm install
+  └── npm run lint (oxlint - 0 errors, 0 warnings)
+  │
+  ▼ (needs: lint - runs only if lint succeeds)
+Job 2: build-and-test (Build & Automated Testing)
+  ├── Checkout code (actions/checkout@v4)
+  ├── Setup Node.js 20 (actions/setup-node@v4)
+  ├── npm install (root & backend)
+  ├── npm run build (Vite production bundle verification)
+  └── npm test (Jest + Supertest API endpoints)
+  │
+  ▼
+GitHub Status Check Result:
+  ├── [ALL PASS] ──► Green Checkmark (✔) & Passing Status Badge
+  └── [ANY FAIL] ──► Red X (✖) & Actionable Failure Logs
+```
+
+### Implementation Details
+
+1. **Workflow Definition** ([`.github/workflows/ci.yml`](file:///.github/workflows/ci.yml)):
+   - Configured triggers for `push` and `pull_request` on the `main` branch.
+   - **Job 1 (`lint`)**: Enforces code style and catches unused variables or syntax bugs before testing begins using `oxlint`.
+   - **Job 2 (`build-and-test`)**: Dependent on `lint` (`needs: lint`). Installs dependencies, builds the Vite production bundle, and runs backend automated tests.
+
+2. **Automated Test Suite** ([`backend/server.test.js`](file:///backend/server.test.js)):
+   - Uses `jest` and `supertest` for fast, headless HTTP API testing.
+   - **Test 1 (Core Step 2):** Tests `GET /tasks` returns HTTP status `200`.
+   - **Test 2 (Supplementary Endpoint):** Tests `GET /health` returns HTTP status `200` with `{ status: 'OK' }`.
+   - **Test 3 (Supplementary Endpoint):** Tests `POST /register` returns HTTP status `400` when required body fields are missing.
+   - **Test 4 (Supplementary Endpoint):** Tests `POST /login` returns HTTP status `400` when credentials are omitted.
+
+3. **Status Badge** ([`README.md`](file:///README.md)):
+   - Embedded live GitHub Actions workflow status badge reflecting current pipeline health:
+     ```markdown
+     [![CI Pipeline](https://github.com/sujal777305/Portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/sujal777305/Portfolio/actions/workflows/ci.yml)
+     ```
+
+### How to Run and Test Locally
+
+1. **Run Linter:**
+   ```bash
+   npm run lint
+   ```
+2. **Run Automated Test Suite:**
+   ```bash
+   npm test
+   # OR from backend folder:
+   cd backend && npm test
+   ```
+3. **Run Production Build:**
+   ```bash
+   npm run build
+   ```
+
+---
+
+### Step-by-Step Lab Demonstration Guide
+
+#### Demonstration 1: Push Workflow to GitHub
+1. Stage, commit, and push the repository:
+   ```bash
+   git add .
+   git commit -m "feat(ci): configure GitHub Actions CI/CD pipeline (Practical 12)"
+   git push origin main
+   ```
+2. Open your GitHub repository in your browser: `https://github.com/sujal777305/Portfolio`.
+3. Click on the **Actions** tab.
+4. Observe the running workflow named **CI Pipeline**. Click into it to view live logs for `lint` and `build-and-test`.
+5. Verify both jobs complete with green checkmarks (**✔**).
+
+#### Demonstration 2: Intentionally Break the Pipeline (Red X)
+1. Open [`backend/server.test.js`](file:///backend/server.test.js).
+2. Change the expected status code in Test 1 from `200` to `500`:
+   ```javascript
+   test('GET /tasks returns 200', async () => {
+       const res = await request(app).get('/tasks');
+       expect(res.statusCode).toBe(500); // ❌ Deliberately broken
+   });
+   ```
+3. Commit and push the broken test:
+   ```bash
+   git add backend/server.test.js
+   git commit -m "test: deliberately break test to demonstrate CI failure"
+   git push origin main
+   ```
+4. In GitHub > **Actions** tab:
+   - Observe the workflow fails with a **Red X (✖)**.
+   - Click into `build-and-test` > `Run Automated Backend Tests` to view the Jest failure log:
+     ```
+     Expected: 500
+     Received: 200
+     ```
+5. *Take a screenshot of this failed run for your lab journal.*
+
+#### Demonstration 3: Fix the Pipeline (Green Checkmark)
+1. Open [`backend/server.test.js`](file:///backend/server.test.js) and revert the test back to `200`:
+   ```javascript
+   test('GET /tasks returns 200', async () => {
+       const res = await request(app).get('/tasks');
+       expect(res.statusCode).toBe(200); // ✔ Fixed
+   });
+   ```
+2. Commit and push the fix:
+   ```bash
+   git add backend/server.test.js
+   git commit -m "fix(test): correct expected status code to restore green CI pipeline"
+   git push origin main
+   ```
+3. In GitHub > **Actions** tab:
+   - Observe the workflow passes completely with a **Green Checkmark (✔)**.
+4. *Take a screenshot of this passing run for your lab journal.*
+
+---
+
+### Key Questions & Analysis (Viva Preparation)
+
+1. **What is the difference between Continuous Integration and Continuous Deployment, and which one does this practical actually demonstrate?**
+   - **Continuous Integration (CI):** The practice of frequently merging code changes into a central repository, where automated builds, linters, and tests run on every commit to catch integration errors early.
+   - **Continuous Deployment (CD):** The automated process of releasing every passing build into staging or production environments without manual human intervention.
+   - **Which one this practical demonstrates:** This practical demonstrates **Continuous Integration (CI)** because it validates code quality, builds assets, and runs automated tests on push/PR, but does not deploy the application to a cloud host.
+
+2. **Why does running tests automatically on every push catch problems earlier than testing manually before a release?**
+   - Manual testing before release usually occurs weeks or months after code was written, by which time identifying which specific commit caused a regression requires tedious debugging. Automated CI runs within minutes of each push, isolating bugs to the exact lines changed in that specific commit while the context is fresh in the developer's mind.
+
+3. **What would happen to the pipeline if the test file path were incorrect; would the workflow fail at the same step as a genuine test failure?**
+   - If the test path is incorrect (or matches zero test files), Jest by default fails at the test runner discovery phase (`No tests found`), or the shell command fails with `file not found (ENOENT)`. While the workflow step `Run Automated Backend Tests` fails with an exit code > 0 in both cases, the error log diagnostics differ significantly: a syntax/path error fails before executing assertions, whereas a genuine test failure reports specific expected vs. received assertion diffs.
+
+---
+
+### Troubleshooting Guide
+
+| Symptom | Probable Cause | Fix |
+|---|---|---|
+| Workflow does not appear under Actions tab | File not in `.github/workflows/` or wrong extension | Ensure path is exactly `.github/workflows/ci.yml`. |
+| Workflow fails immediately with YAML syntax error | Incorrect indentation or tabs in YAML | Use 2 spaces for indentation and never use hard tabs. |
+| `npm test` fails with 'no test specified' | `package.json` test script missing | Set `"test": "jest --runInBand --forceExit"` in `backend/package.json`. |
+| Pipeline passes even with a broken test | Test logic does not assert expected values | Verify assertion `expect(...)` is actively executing. |
+
 ## Scripts
 
 | Command | Description |
@@ -513,7 +671,10 @@ This script performs 31 comprehensive checks validating:
 | `npm run dev` | Start Vite development server |
 | `npm run build` | Production build |
 | `npm run preview` | Preview production build |
+| `npm run lint` | Run oxlint linter |
+| `npm test` | Run backend automated test suite |
 | `npm run test:practical11` | Automated test suite for Practical 11 Docker orchestration |
+| `npm run test:practical12` | Run backend automated test suite (Practical 12) |
 
 ## Tech Stack
 
@@ -521,5 +682,7 @@ This script performs 31 comprehensive checks validating:
 - Node.js + Express
 - MongoDB + Mongoose
 - Docker & Docker Compose
+- GitHub Actions CI/CD
+- Jest & Supertest
 - React Router
 - CSS (custom design tokens, dark/light theme)

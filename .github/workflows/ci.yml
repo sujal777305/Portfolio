@@ -1,0 +1,56 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm install
+
+      - name: Run Linter (oxlint)
+        run: npm run lint
+
+  build-and-test:
+    name: Build & Automated Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm install
+
+      - name: Install Backend Dependencies
+        run: cd backend && npm install
+
+      - name: Build Frontend Production Bundle
+        run: npm run build
+
+      - name: Run Automated Backend Tests
+        env:
+          NODE_ENV: test
+          JWT_SECRET: supersecretjwtkey_practical7_2026
+        run: npm test

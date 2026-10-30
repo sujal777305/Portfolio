@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-practical10.js",
+    "test": "jest --runInBand --forceExit",
     "test:practical10": "node test-practical10.js"
   },
   "keywords": [],
@@ -20,5 +20,9 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.1",
     "node-cache": "^5.1.2"
+  },
+  "devDependencies": {
+    "jest": "^30.5.2",
+    "supertest": "^7.3.1"
   }
 }
